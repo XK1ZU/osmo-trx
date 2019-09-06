@@ -587,9 +587,11 @@ void writeToFile(radioVector *radio_burst, size_t chan)
 /*
  * Pull bursts from the FIFO and handle according to the slot
  * and burst correlation type. Equalzation is currently disabled.
- * returns true on success (bi filled), false on error (bi content undefined).
+ * returns 0 on success (bi filled), negative on error (bi content undefined):
+ *        -1: timeslot is off (fn and tn in bi are filled),
+ *        -2: read error
  */
-bool Transceiver::pullRadioVector(size_t chan, struct trx_ul_burst_ind *bi)
+int Transceiver::pullRadioVector(size_t chan, struct trx_ul_burst_ind *bi)
 {
   int rc;
   struct estim_burst_params ebp;
@@ -605,25 +607,11 @@ bool Transceiver::pullRadioVector(size_t chan, struct trx_ul_burst_ind *bi)
   radioVector *radio_burst = mReceiveFIFO[chan]->read();
   if (!radio_burst) {
     LOGCHAN(chan, DMAIN, ERROR) << "ReceiveFIFO->read() returned no burst";
-    return false;
+    return -2;
   }
 
   /* Set time and determine correlation type */
   burstTime = radio_burst->getTime();
-  CorrType type = expectedCorrType(burstTime, chan);
-
-  /* Debug: dump bursts to disk */
-  /* bits 0-7  - chan 0 timeslots
-   * bits 8-15 - chan 1 timeslots */
-  if (mWriteBurstToDiskMask & ((1<<bi->tn) << (8*chan)))
-    writeToFile(radio_burst, chan);
-
-  /* No processing if the timeslot is off.
-   * Not even power level or noise calculation. */
-  if (type == OFF) {
-    delete radio_burst;
-    return false;
-  }
 
   /* Initialize struct bi */
   bi->nbits = 0;
@@ -637,6 +625,21 @@ bool Transceiver::pullRadioVector(size_t chan, struct trx_ul_burst_ind *bi)
   bi->tss = 0; /* TODO: we only support tss 0 right now */
   bi->tsc = 0;
   bi->ci = 0.0;
+
+  CorrType type = expectedCorrType(burstTime, chan);
+
+  /* Debug: dump bursts to disk */
+  /* bits 0-7  - chan 0 timeslots
+   * bits 8-15 - chan 1 timeslots */
+  if (mWriteBurstToDiskMask & ((1<<bi->tn) << (8*chan)))
+    writeToFile(radio_burst, chan);
+
+  /* No processing if the timeslot is off.
+   * Not even power level or noise calculation. */
+  if (type == OFF) {
+    delete radio_burst;
+    return -1;
+  }
 
   /* Select the diversity channel with highest energy */
   for (size_t i = 0; i < radio_burst->chans(); i++) {
@@ -702,12 +705,12 @@ bool Transceiver::pullRadioVector(size_t chan, struct trx_ul_burst_ind *bi)
 
   delete rxBurst;
   delete radio_burst;
-  return true;
+  return 0;
 
 ret_idle:
   bi->idle = true;
   delete radio_burst;
-  return true;
+  return 0;
 }
 
 void Transceiver::reset()
@@ -1032,9 +1035,15 @@ void Transceiver::logRxBurst(size_t chan, const struct trx_ul_burst_ind *bi)
 bool Transceiver::driveReceiveFIFO(size_t chan)
 {
   struct trx_ul_burst_ind bi;
+  int rc;
 
-  if (!pullRadioVector(chan, &bi))
-    return false;
+  if ((rc = pullRadioVector(chan, &bi)) < 0) {
+    if (rc == -1) { /* timeslot off, warn and continue processing */
+      LOGCHAN(chan, DMAIN, NOTICE) << unsigned(bi.tn) << ":" << bi.fn << " timeslot is off";
+      return true;
+    }
+    return false; /* other errors: we want to stop the process */
+  }
 
   if (!bi.idle)
     logRxBurst(chan, &bi);
