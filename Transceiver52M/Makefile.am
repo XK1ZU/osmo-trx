@@ -104,3 +104,12 @@ osmo_trx_lms_LDADD = \
 	$(LMS_LIBS)
 osmo_trx_lms_CPPFLAGS  = $(AM_CPPFLAGS) $(LMS_CFLAGS)
 endif
+
+if DEVICE_PCIESDR
+bin_PROGRAMS += osmo-trx-pciesdr
+osmo_trx_pciesdr_SOURCES = osmo-trx.cpp
+osmo_trx_pciesdr_LDADD = \
+        $(builddir)/device/pciesdr/libdevice.la \
+        $(COMMON_LDADD)
+osmo_trx_pciesdr_CPPFLAGS  = $(AM_CPPFLAGS)
+endif

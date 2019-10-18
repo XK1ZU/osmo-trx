@@ -13,3 +13,7 @@ endif
 if DEVICE_LMS
 SUBDIRS += lms
 endif
+
+if DEVICE_PCIESDR
+SUBDIRS += pciesdr
+endif
