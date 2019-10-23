@@ -5,7 +5,7 @@
 #include "config.h"
 #endif
 
-#include "common/radioDevice.h"
+#include "radioDevice.h"
 
 #include <stdint.h>
 #include <sys/time.h>
@@ -22,16 +22,12 @@ private:
   int rxsps;
   unsigned int dma_buffer_count;
   unsigned int dma_buffer_len;
-  double actualTXSampleRate;         ///< the actual sampling rate
-  double actualRXSampleRate;         ///< the actual sampling rate
+  double actualSampleRate;           ///< the actual sampling rate
   unsigned long long samplesRead;    ///< number of samples read from PCIESDR
   unsigned long long samplesWritten; ///< number of samples sent to PCIESDR
   bool started;                      ///< flag indicates PCIESDR has started
   TIMESTAMP timeStart;
-  TIMESTAMP timeLastHW;
-  TIMESTAMP timeRx;
   std::vector<double> tx_gains, rx_gains;
-  double rxGain;
   bool loopback;
   int64_t tx_underflow;
   int64_t rx_overflow;
@@ -41,8 +37,6 @@ private:
     float re;
     float im;
   } sample_t;
-  sample_t *tx_samples;
-  sample_t *rx_samples;
 
 public:
     /** Object constructor */
@@ -102,7 +96,9 @@ public:
   /** sets the receive chan gain, returns the gain setting **/
   double setRxGain(double dB, size_t chan = 0);
   /** get the current receive gain */
-  double getRxGain(size_t chan = 0) { return rxGain; }
+  double getRxGain(size_t chan = 0) {
+    return rx_gains[chan];
+  }
   /** return maximum Rx Gain **/
   double maxRxGain(void);
   /** return minimum Rx Gain **/
@@ -132,7 +128,7 @@ public:
   /** Return internal status values */
   inline double getTxFreq(size_t chan = 0) { return 0; }
   inline double getRxFreq(size_t chan = 0) { return 0; }
-  inline double getSampleRate() { return actualTXSampleRate; }
+  inline double getSampleRate() { return actualSampleRate; }
   inline double numberRead() { return samplesRead; }
   inline double numberWritten() { return samplesWritten; }
 };
