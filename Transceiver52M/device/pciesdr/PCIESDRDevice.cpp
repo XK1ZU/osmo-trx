@@ -27,9 +27,6 @@ extern "C" {
 
 using namespace std;
 
-const double defaultRXBandwidth = 1.5e6;
-const double defaultTXBandwidth = 1.5e6;
-
 PCIESDRDevice::PCIESDRDevice(size_t tx_sps, size_t rx_sps, InterfaceType iface, size_t chans, double lo_offset,
                              const std::vector<std::string>& tx_paths,
                              const std::vector<std::string>& rx_paths):
@@ -37,11 +34,10 @@ PCIESDRDevice::PCIESDRDevice(size_t tx_sps, size_t rx_sps, InterfaceType iface, 
 {
   LOG(INFO) << "creating PCIESDR device...";
 
-  this->txsps = txsps;
-  this->rxsps = rxsps;
+  this->txsps = tx_sps;
+  this->rxsps = rx_sps;
 
   LOG(INFO) << "PCIESDR device txsps:" << txsps << " rxsps:" << rxsps << " GSMRATE:" << GSMRATE;
-  rxGain = 0;
   dma_buffer_count = 10;
   dma_buffer_len = 2500;
 
@@ -227,17 +223,16 @@ double PCIESDRDevice::setTxGain(double dB, size_t chan)
     LOG(ALERT) << "Invalid channel " << chan;
     return 0.0;
   }
-  double actual = StartParams.tx_gain[chan];
   LOG(NOTICE) << "Setting TX gain to " << dB << " dB. device:" << device << " chan:" << chan;
 
   res = msdr_set_tx_gain(device, chan, dB);
   if (res) {
     LOG(ERR) << "Error setting TX gain res: " << res;
   } else {
-    actual = dB;
+    StartParams.tx_gain[chan] = dB;
   }
 
-  return actual;
+  return StartParams.tx_gain[chan];
 }
 
 double PCIESDRDevice::setRxGain(double dB, size_t chan)
@@ -249,16 +244,15 @@ double PCIESDRDevice::setRxGain(double dB, size_t chan)
     return 0.0;
   }
 
-  double actual = StartParams.rx_gain[chan];
   LOG(NOTICE) << "Setting RX gain to " << dB << " dB.";
   res = msdr_set_rx_gain(device, chan, dB);
   if (res) {
     LOG(ERR) << "Error setting RX gain res: " << res;
   } else {
-    actual = dB;
+    StartParams.rx_gain[chan] = dB;
   }
 
-  return actual;
+  return StartParams.rx_gain[chan];
 }
 
 int PCIESDRDevice::readSamples(std::vector<short *> &bufs, int len, bool *overrun,
