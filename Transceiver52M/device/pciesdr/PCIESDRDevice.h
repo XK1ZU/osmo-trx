@@ -42,7 +42,6 @@ private:
     float im;
   } sample_t;
   sample_t *tx_samples;
-  unsigned int tx_samples_index;
   sample_t *rx_samples;
 
 public:

@@ -6,6 +6,7 @@
 #include "Threads.h"
 #include "PCIESDRDevice.h"
 
+#define LIBSDR_HAS_MSDR_CONVERT
 extern "C" {
 #include "libsdr.h"
 }
@@ -71,7 +72,6 @@ int PCIESDRDevice::open(const std::string &args, int ref, bool swap_channels)
   LOG(INFO) << "opening PCIESDR device '"  << args << "'..";
   int lb_param = parse_config(args.c_str(), "loopback", 0);
   started = false;
-  tx_samples_index = 0;
   char pciesdr_name[500];
   const char* lend = strchr(args.c_str(), ',');
   int len = (lend) ? (lend - args.c_str()) : sizeof(pciesdr_name) - 1;
@@ -147,7 +147,8 @@ PCIESDRDevice::~PCIESDRDevice()
 bool PCIESDRDevice::start()
 {
   SDRStats    stats;
-  int res;
+  int         res;
+
   LOG(INFO) << "PCIESDRDevice::start";
   LOG(INFO) << "starting PCIeSDR..., sample rate:" << StartParams.sample_rate_num[0];
   if (started) {
@@ -175,6 +176,7 @@ bool PCIESDRDevice::start()
 bool PCIESDRDevice::stop()
 {
   int         res;
+
   LOG(INFO) << "PCIESDRDevice::stop";
 
   if (started) {
@@ -220,6 +222,7 @@ double PCIESDRDevice::minRxGain()
 double PCIESDRDevice::setTxGain(double dB, size_t chan)
 {
   int         res;
+
   if (chan) {
     LOG(ALERT) << "Invalid channel " << chan;
     return 0.0;
@@ -240,6 +243,7 @@ double PCIESDRDevice::setTxGain(double dB, size_t chan)
 double PCIESDRDevice::setRxGain(double dB, size_t chan)
 {
   int         res;
+
   if (chan) {
     LOG(ALERT) << "Invalid channel " << chan;
     return 0.0;
@@ -265,7 +269,9 @@ int PCIESDRDevice::readSamples(std::vector<short *> &bufs, int len, bool *overru
   int64_t            timestamp_tmp;
   int                res = 0;
   int                total = 0;
+#ifndef LIBSDR_HAS_MSDR_CONVERT
   float              powerScaling[] = {1, 1, 1, 1};
+#endif
 
   if (!started) {
     return -1;
@@ -286,7 +292,11 @@ int PCIESDRDevice::readSamples(std::vector<short *> &bufs, int len, bool *overru
   if (total != len) {
     LOG(ALERT) << "PCIeSDR readSamples msdr_read failed res " << total << " device: " << device << " len: " << len << " TSsmp: " << timestamp_tmp << " TS:" << timestamp;
   }
-  convert_float_short(bufs[0], (float *) psamples, powerScaling[0], len * 2);
+#ifdef LIBSDR_HAS_MSDR_CONVERT
+  msdr_convert_cf32_to_ci16(bufs[0], (float *)psamples, len);
+#else
+  convert_float_short(bufs[0], (float *)psamples, powerScaling[0], len * 2);
+#endif
 
   return total;
 }
@@ -295,7 +305,7 @@ int PCIESDRDevice::writeSamples(std::vector<short *> &bufs, int len,
                                 bool *underrun, unsigned long long timestamp,
                                 bool isControl)
 {
-  static sample_t    samples[10][PSAMPLES_NUM];
+  static sample_t    samples[PSAMPLES_NUM];
   static sample_t    *psamples;
   int                res;
   int64_t            hw_time;
@@ -310,9 +320,13 @@ int PCIESDRDevice::writeSamples(std::vector<short *> &bufs, int len,
     return 0;
   }
 
-  psamples = &samples[this->tx_samples_index % 10][0];
-  this->tx_samples_index++;
+  psamples = &samples[0];
+
+#ifdef LIBSDR_HAS_MSDR_CONVERT
+  msdr_convert_ci16_to_cf32((float*)psamples, bufs[0], len);
+#else
   convert_short_float((float*)psamples, bufs[0], len * 2);
+#endif
   timestamp_tmp = timestamp + timeStart;
   res = msdr_write(device, timestamp_tmp, (const void**)&psamples, len, 0, &hw_time);
   if (res != len) {
@@ -334,7 +348,7 @@ int PCIESDRDevice::writeSamples(std::vector<short *> &bufs, int len,
 
   if (hw_time > timestamp_tmp) {
     LOGC(DDEV, ALERT) << "PCIeSDR: tx underrun ts:" << timestamp_tmp << " hwts:" << hw_time;
-  *underrun = 1;
+    *underrun = 1;
   }
 
   return len;
@@ -429,5 +443,5 @@ RadioDevice *RadioDevice::make(size_t tx_sps, size_t rx_sps,
     return NULL;
   }
 
-    return new PCIESDRDevice(tx_sps, rx_sps, iface, chans, lo_offset, tx_paths, rx_paths);
+  return new PCIESDRDevice(tx_sps, rx_sps, iface, chans, lo_offset, tx_paths, rx_paths);
 }
