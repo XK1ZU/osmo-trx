@@ -6,6 +6,7 @@
 #endif
 
 #include "radioDevice.h"
+#include "smpl_buf.h"
 
 #include <stdint.h>
 #include <sys/time.h>
@@ -20,13 +21,15 @@ class PCIESDRDevice:public RadioDevice {
 private:
   int txsps;
   int rxsps;
+  std::vector<smpl_buf *> rx_buffers;
+
   unsigned int dma_buffer_count;
   unsigned int dma_buffer_len;
   double actualSampleRate;           ///< the actual sampling rate
   unsigned long long samplesRead;    ///< number of samples read from PCIESDR
   unsigned long long samplesWritten; ///< number of samples sent to PCIESDR
   bool started;                      ///< flag indicates PCIESDR has started
-  TIMESTAMP timeStart;
+  TIMESTAMP ts_initial, ts_offset;
   std::vector<double> tx_gains, rx_gains;
   bool loopback;
   int64_t tx_underflow;
@@ -53,7 +56,7 @@ public:
   /** Set priority not supported */
   //void setPriority(float prio = 0.5) { }
   enum TxWindowType getWindowType() {
-    return TX_WINDOW_FIXED;
+    return TX_WINDOW_LMS1;
   }
   /**
   Read samples from the PCIESDR.
@@ -86,9 +89,13 @@ public:
   /** Set the receiver frequency */
   bool setRxFreq(double wFreq, size_t chan = 0);
   /** Returns the starting write Timestamp*/
-  TIMESTAMP initialWriteTimestamp(void);
+  TIMESTAMP initialWriteTimestamp(void) {
+    return ts_initial;
+  }
   /** Returns the starting read Timestamp*/
-  TIMESTAMP initialReadTimestamp(void) { return 20000;}
+  TIMESTAMP initialReadTimestamp(void) {
+    return ts_initial;
+  }
   /** returns the full-scale transmit amplitude **/
   double fullScaleInputValue() {return (double) 32767*0.7;}
   /** returns the full-scale receive amplitude **/
