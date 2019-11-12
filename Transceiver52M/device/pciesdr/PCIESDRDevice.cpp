@@ -31,6 +31,20 @@ extern "C" {
 #define PSAMPLES_NUM  4096
 #define SAMPLE_BUF_SZ (1 << 20) /* Size of Rx timestamp based Ring buffer, in bytes */
 
+// greatest common divisor
+static long gcd(long a, long b)
+{
+  if (a == 0)
+    return b;
+  else if (b == 0)
+    return a;
+
+  if (a < b)
+    return gcd(a, b % a);
+  else
+    return gcd(b, a % b);
+}
+
 using namespace std;
 
 PCIESDRDevice::PCIESDRDevice(size_t tx_sps, size_t rx_sps, InterfaceType iface, size_t chans, double lo_offset,
@@ -110,6 +124,22 @@ int PCIESDRDevice::open(const std::string &args, int ref, bool swap_channels)
   StartParams.interface_type = SDR_INTERFACE_RF;
   StartParams.sync_source = SDR_SYNC_NONE;
 
+  // calculate sample rate using Euclidean algorithm
+  double rate = (double)GSMRATE*tx_sps;
+  double integral = floor(rate);
+  double frac = rate - integral;
+  const long precision = 1000000000; // This is the accuracy
+  long gcd_ = gcd(round(frac * precision), precision);
+  long denominator = precision / gcd_;
+  long numerator = round(frac * precision) / gcd_;
+  StartParams.sample_rate_num[0] = (int64_t)(integral * denominator + numerator);
+  StartParams.sample_rate_den[0] = denominator;
+  actualSampleRate = (double)StartParams.sample_rate_num[0] / (double)StartParams.sample_rate_den[0];
+  StartParams.rx_bandwidth[0] = actualSampleRate * 0.75;
+  StartParams.tx_bandwidth[0] = actualSampleRate * 0.75;
+  LOG(INFO) << "PCIESDR device txsps:" << tx_sps << " rxsps:" << rx_sps << " GSMRATE * tx_sps:" << (double)GSMRATE * tx_sps;
+  LOG(INFO) << "PCIESDR sample_rate_num:" << StartParams.sample_rate_num[0] << " sample_rate_den:" << StartParams.sample_rate_den[0] << " BW:" << StartParams.rx_bandwidth[0];
+
   switch (ref) {
     case REF_INTERNAL:
       LOGC(DDEV, INFO) << "Setting Internal clock reference";
@@ -120,9 +150,6 @@ int PCIESDRDevice::open(const std::string &args, int ref, bool swap_channels)
       goto out_close;
   }
 
-  LOG(INFO) << "PCIESDR device txsps:" << tx_sps << " rxsps:" << rx_sps << " GSMRATE:" << GSMRATE << " GSMRATE*tx_sps:" << (int64_t) GSMRATE*tx_sps;
-  StartParams.sample_rate_num[0] = (int64_t)1625000*tx_sps;
-  StartParams.sample_rate_den[0] = 6;
   //StartParams.rx_sample_fmt;
   //StartParams.tx_sample_fmt;
   //StartParams.rx_sample_hw_fmt;
@@ -133,19 +160,13 @@ int PCIESDRDevice::open(const std::string &args, int ref, bool swap_channels)
   StartParams.tx_freq[0] = 1500e6;
   StartParams.rx_gain[0] = 60;
   StartParams.tx_gain[0] = 40;
-  StartParams.rx_bandwidth[0] = 1.5e6;
-  StartParams.tx_bandwidth[0] = 1.2e6;
   StartParams.rx_antenna[0] = SDR_RX_ANTENNA_RX;
   StartParams.rf_port_count = 1;
   StartParams.tx_port_channel_count[0] = 1;
   StartParams.rx_port_channel_count[0] = 1;
 
-  actualSampleRate = (double)StartParams.sample_rate_num[0] / (double)StartParams.sample_rate_den[0];
-
   /* FIXME: estimate it properly */
   ts_offset = static_cast<TIMESTAMP>(8.9e-5 * GSMRATE * tx_sps); /* time * sample_rate */
-
-  LOG(INFO) << "open PCIESDR device: "  << device << "sample_rate:" << actualSampleRate;
 
   /* Set up per-channel Rx timestamp based Ring buffers */
   for (size_t i = 0; i < rx_buffers.size(); i++) {
