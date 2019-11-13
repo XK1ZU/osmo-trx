@@ -59,7 +59,7 @@ PCIESDRDevice::PCIESDRDevice(size_t tx_sps, size_t rx_sps, InterfaceType iface, 
 
   LOG(INFO) << "PCIESDR device txsps:" << txsps << " rxsps:" << rxsps << " GSMRATE:" << GSMRATE;
   dma_buffer_count = 10;
-  dma_buffer_len = 2500;
+  dma_buffer_len = 250;
 
   loopback = false;
   device = NULL;
@@ -121,8 +121,9 @@ int PCIESDRDevice::open(const std::string &args, int ref, bool swap_channels)
   }
 
   msdr_set_default_start_params(device, &StartParams);
-  StartParams.interface_type = SDR_INTERFACE_RF;
-  StartParams.sync_source = SDR_SYNC_NONE;
+  StartParams.interface_type = SDR_INTERFACE_RF; /* RF interface */
+  StartParams.sync_source = SDR_SYNC_NONE; /* no time synchronisation */
+  //StartParams.sync_source = SDR_SYNC_INTERNAL; /* sync on internal PPS */
 
   // calculate sample rate using Euclidean algorithm
   double rate = (double)GSMRATE*tx_sps;
@@ -133,7 +134,7 @@ int PCIESDRDevice::open(const std::string &args, int ref, bool swap_channels)
   long denominator = precision / gcd_;
   long numerator = round(frac * precision) / gcd_;
   StartParams.sample_rate_num[0] = (int64_t)(integral * denominator + numerator);
-  StartParams.sample_rate_den[0] = denominator;
+  StartParams.sample_rate_den[0] = (int64_t)denominator;
   actualSampleRate = (double)StartParams.sample_rate_num[0] / (double)StartParams.sample_rate_den[0];
   StartParams.rx_bandwidth[0] = actualSampleRate * 0.75;
   StartParams.tx_bandwidth[0] = actualSampleRate * 0.75;
@@ -143,17 +144,17 @@ int PCIESDRDevice::open(const std::string &args, int ref, bool swap_channels)
   switch (ref) {
     case REF_INTERNAL:
       LOGC(DDEV, INFO) << "Setting Internal clock reference";
-      StartParams.clock_source = SDR_CLOCK_INTERNAL;
+      StartParams.clock_source = SDR_CLOCK_INTERNAL; /* internal clock, using PPS to correct it */
       break;
     default:
       LOGC(DDEV, ALERT) << "Invalid reference type";
       goto out_close;
   }
 
-  //StartParams.rx_sample_fmt;
-  //StartParams.tx_sample_fmt;
-  //StartParams.rx_sample_hw_fmt;
-  //StartParams.tx_sample_hw_fmt;
+  StartParams.rx_sample_fmt = SDR_SAMPLE_FMT_CF32; /* complex float32 */
+  StartParams.tx_sample_fmt = SDR_SAMPLE_FMT_CF32; /* complex float32 */
+  StartParams.rx_sample_hw_fmt = SDR_SAMPLE_HW_FMT_AUTO; /* choose best format fitting the bandwidth */
+  StartParams.tx_sample_hw_fmt = SDR_SAMPLE_HW_FMT_AUTO; /* choose best format fitting the bandwidth */
   StartParams.rx_channel_count = 1;
   StartParams.tx_channel_count = 1;
   StartParams.rx_freq[0] = 1550e6;
@@ -164,6 +165,9 @@ int PCIESDRDevice::open(const std::string &args, int ref, bool swap_channels)
   StartParams.rf_port_count = 1;
   StartParams.tx_port_channel_count[0] = 1;
   StartParams.rx_port_channel_count[0] = 1;
+   /* if != 0, set a custom DMA buffer configuration. Otherwise the default is 150 buffers per 10 ms */
+  StartParams.dma_buffer_count = dma_buffer_count;
+  StartParams.dma_buffer_len = dma_buffer_len; /* in samples */
 
   /* FIXME: estimate it properly */
   ts_offset = static_cast<TIMESTAMP>(8.9e-5 * GSMRATE * tx_sps); /* time * sample_rate */
@@ -337,12 +341,13 @@ int PCIESDRDevice::readSamples(std::vector<short *> &bufs, int len, bool *overru
     /* Receive samples from HW until we have enough */
     while ((avail_smpls = rx_buffers[i]->avail_smpls(timestamp)) < len) {
       expect_smpls = len - avail_smpls;
+      expect_smpls = expect_smpls > (int)dma_buffer_len ? expect_smpls : (int)dma_buffer_len;
       expect_timestamp = timestamp + avail_smpls;
       timestamp_tmp = 0;
       psamples = &samples[0];
-      num_smpls = msdr_read(device, &timestamp_tmp, (void**)&psamples, len, i, 100);
+      num_smpls = msdr_read(device, &timestamp_tmp, (void**)&psamples, expect_smpls, i, 100);
       if (num_smpls < 0) {
-        LOG(ALERT) << "PCIeSDR readSamples msdr_read failed num_smpls " << num_smpls << " device: " << device << " len: " << len
+        LOG(ALERT) << "PCIeSDR readSamples msdr_read failed num_smpls " << num_smpls << " device: " << device << " expect_smpls: " << expect_smpls
                    << ", expTs:" << expect_timestamp << " got " << timestamp_tmp;
         LOGCHAN(i, DDEV, ERROR) << "Device receive timed out (" << rc << " vs exp " << len << ").";
         return -1;
