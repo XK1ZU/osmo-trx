@@ -362,7 +362,7 @@ int PCIESDRDevice::readSamples(std::vector<short *> &bufs, int len, bool *overru
 #endif
 
       if (expect_smpls != num_smpls) {
-        LOGCHAN(i, DDEV, NOTICE) << "Unexpected recv buffer len: expect "
+        LOGCHAN(i, DDEV, DEBUG) << "Unexpected recv buffer len: expect "
                                  << expect_smpls << " got " << num_smpls
                                  << ", diff=" << expect_smpls - num_smpls
                                  << ", expTs:" << expect_timestamp << " got " << timestamp_tmp;
