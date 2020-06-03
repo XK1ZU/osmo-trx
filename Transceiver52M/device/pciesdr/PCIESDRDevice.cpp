@@ -47,10 +47,10 @@ static long gcd(long a, long b)
 
 using namespace std;
 
-PCIESDRDevice::PCIESDRDevice(size_t tx_sps, size_t rx_sps, InterfaceType iface, size_t chans, double lo_offset,
+PCIESDRDevice::PCIESDRDevice(size_t tx_sps, size_t rx_sps, InterfaceType iface, size_t chan_num, double lo_offset,
                              const std::vector<std::string>& tx_paths,
                              const std::vector<std::string>& rx_paths):
-  RadioDevice(tx_sps, rx_sps, iface, chans, lo_offset, tx_paths, rx_paths)
+  RadioDevice(tx_sps, rx_sps, iface, chan_num, lo_offset, tx_paths, rx_paths)
 {
   LOG(INFO) << "creating PCIESDR device...";
 
@@ -65,6 +65,11 @@ PCIESDRDevice::PCIESDRDevice(size_t tx_sps, size_t rx_sps, InterfaceType iface, 
   device = NULL;
 
   rx_buffers.resize(chans);
+
+  /* Set up per-channel Rx timestamp based Ring buffers */
+  for (size_t i = 0; i < rx_buffers.size(); i++) {
+    rx_buffers[i] = new smpl_buf(SAMPLE_BUF_SZ / sizeof(uint32_t));
+  }
 }
 
 PCIESDRDevice::~PCIESDRDevice()
@@ -171,11 +176,6 @@ int PCIESDRDevice::open(const std::string &args, int ref, bool swap_channels)
 
   /* FIXME: estimate it properly */
   ts_offset = static_cast<TIMESTAMP>(8.9e-5 * GSMRATE * tx_sps); /* time * sample_rate */
-
-  /* Set up per-channel Rx timestamp based Ring buffers */
-  for (size_t i = 0; i < rx_buffers.size(); i++) {
-    rx_buffers[i] = new smpl_buf(SAMPLE_BUF_SZ / sizeof(uint32_t));
-  }
 
   started = false;
   return NORMAL;
@@ -386,8 +386,9 @@ int PCIESDRDevice::readSamples(std::vector<short *> &bufs, int len, bool *overru
   for (size_t i = 0; i < rx_buffers.size(); i++) {
     rc = rx_buffers[i]->read(bufs[i], len, timestamp);
     if ((rc < 0) || (rc != len)) {
-      LOGC(DDEV, ERROR) << rx_buffers[i]->str_code(rc);
-      LOGC(DDEV, ERROR) << rx_buffers[i]->str_status(timestamp);
+      LOGCHAN(i, DDEV, ERROR) << rx_buffers[i]->str_code(rc) << ". "
+                              << rx_buffers[i]->str_status(timestamp)
+                              << ", (len=" << len << ")";
       return 0;
     }
   }
