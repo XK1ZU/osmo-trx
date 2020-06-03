@@ -175,7 +175,8 @@ int PCIESDRDevice::open(const std::string &args, int ref, bool swap_channels)
   StartParams.dma_buffer_len = dma_buffer_len; /* in samples */
 
   /* FIXME: estimate it properly */
-  ts_offset = static_cast<TIMESTAMP>(8.9e-5 * GSMRATE * tx_sps); /* time * sample_rate */
+  /* PCIe radio should have this close to zero */
+  ts_offset = static_cast<TIMESTAMP>(0.0e-5 * GSMRATE * tx_sps); /* time * sample_rate */
 
   started = false;
   return NORMAL;
@@ -427,7 +428,7 @@ int PCIESDRDevice::writeSamples(std::vector<short *> &bufs, int len,
     return -1;
   }
 
-  timestamp_tmp = timestamp + ts_offset; /* Shift Tx time by offset */
+  timestamp_tmp = timestamp - ts_offset; /* Shift Tx time by offset */
 
   *underrun = false;
   i = 0;
