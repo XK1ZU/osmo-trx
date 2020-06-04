@@ -58,8 +58,9 @@ PCIESDRDevice::PCIESDRDevice(size_t tx_sps, size_t rx_sps, InterfaceType iface, 
   this->rxsps = rx_sps;
 
   LOG(INFO) << "PCIESDR device txsps:" << txsps << " rxsps:" << rxsps << " GSMRATE:" << GSMRATE;
+  /* The parameter dma_buffer_len is significant for functionality of the Rx chain */
   dma_buffer_count = 10;
-  dma_buffer_len = 250;
+  dma_buffer_len = 1000;
 
   loopback = false;
   device = NULL;
@@ -455,7 +456,7 @@ int PCIESDRDevice::writeSamples(std::vector<short *> &bufs, int len,
       *underrun = true;
     }
 
-    if (timestamp_tmp - hw_time > 10000) {
+    if (timestamp_tmp - hw_time > (int64_t)actualSampleRate / 10) {
       LOGC(DDEV, ALERT) << "PCIeSDR: tx diff more ts_tmp:" << timestamp_tmp << " ts:" << timestamp  << " hwts:" << hw_time;
     }
 
