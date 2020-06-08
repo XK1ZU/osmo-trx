@@ -214,9 +214,35 @@ bool PCIESDRDevice::start()
     tx_underflow = stats.tx_underflow_count;
     rx_overflow  = stats.rx_overflow_count;
   }
+  flush_recv();
   LOG(INFO) << "msdr_start ok:";
   started = true;
 
+  return true;
+}
+
+bool PCIESDRDevice::flush_recv()
+{
+  unsigned int chan = 0;
+  static sample_t samples[PSAMPLES_NUM];
+  static sample_t *psamples;
+  int64_t timestamp_tmp;
+  int expect_smpls = sizeof(samples) / sizeof(samples[0]);
+  int rc;
+
+  LOG(INFO) << "PCIESDRDevice::flush";
+
+  psamples = &samples[0];
+
+  while ((rc = msdr_read(device, &timestamp_tmp, (void**)&psamples, expect_smpls, chan, 100)) > 1) {
+    if (rc < (int)expect_smpls) {
+      break;
+    }
+  }
+  if (rc < 0)
+    return false;
+
+  ts_initial = (TIMESTAMP)timestamp_tmp + rc;
   return true;
 }
 
