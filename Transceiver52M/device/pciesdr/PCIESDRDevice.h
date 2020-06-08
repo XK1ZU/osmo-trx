@@ -31,6 +31,7 @@ private:
   bool started;                      ///< flag indicates PCIESDR has started
   TIMESTAMP ts_initial, ts_offset;
   std::vector<double> tx_gains, rx_gains;
+  bool flush_recv();
   bool loopback;
   int64_t tx_underflow;
   int64_t rx_overflow;
