@@ -177,7 +177,8 @@ int PCIESDRDevice::open(const std::string &args, int ref, bool swap_channels)
 
   /* FIXME: estimate it properly */
   /* PCIe radio should have this close to zero */
-  ts_offset = static_cast<TIMESTAMP>(0.0e-5 * GSMRATE * tx_sps); /* time * sample_rate */
+  /* The MS can connect if the value is between -30 and +5 */
+  ts_offset = -16;
 
   started = false;
   return NORMAL;
