@@ -34,6 +34,8 @@ extern "C" {
 #include "libsdr.h"
 }
 
+#define PCIESDR_TX_AMPL  0.707
+
 /** A class to handle a PCIESDR supported device */
 class PCIESDRDevice:public RadioDevice {
 
@@ -63,6 +65,15 @@ private:
 	int64_t tx_underflow;
 	int64_t rx_overflow;
 
+	/** sets the transmit chan gain, returns the gain setting **/
+	double setTxGain(double dB, size_t chan = 0);
+
+	/** get transmit gain */
+	double getTxGain(size_t chan = 0);
+
+	/** return maximum Tx Gain **/
+	double maxTxGain(void);
+
 public:
 
 	/** Object constructor */
@@ -91,12 +102,10 @@ public:
 	@param overrun Set if read buffer has been overrun, e.g. data not being read fast enough
 	@param timestamp The timestamp of the first samples to be read
 	@param underrun Set if PCIESDR does not have data to transmit, e.g. data not being sent fast enough
-	@param RSSI The received signal strength of the read result
 	@return The number of samples actually read
 	*/
 	int readSamples(std::vector <short *> &buf, int len, bool *overrun,
-		TIMESTAMP timestamp = 0xffffffff, bool *underrun = NULL,
-		unsigned *RSSI = NULL);
+			TIMESTAMP timestamp = 0xffffffff, bool *underrun = NULL);
 
 	/**
 	Write samples to the PCIESDR.
@@ -104,11 +113,10 @@ public:
 	@param len number of samples to write.
 	@param underrun Set if PCIESDR does not have data to transmit, e.g. data not being sent fast enough
 	@param timestamp The timestamp of the first sample of the data buffer.
-	@param isControl Set if data is a control packet, e.g. a ping command
 	@return The number of samples actually written
 	*/
 	int writeSamples(std::vector <short *> &bufs, int len, bool *underrun,
-		TIMESTAMP timestamp = 0xffffffff, bool isControl = false);
+			 TIMESTAMP timestamp = 0xffffffff);
 
 	/** Update the alignment between the read and write timestamps */
 	bool updateAlignment(TIMESTAMP timestamp);
@@ -131,12 +139,12 @@ public:
 
 	/** returns the full-scale transmit amplitude **/
 	double fullScaleInputValue() {
-		return (double) 32767*0.7;
+		return (double) SHRT_MAX * PCIESDR_TX_AMPL;
 	}
 
 	/** returns the full-scale receive amplitude **/
 	double fullScaleOutputValue() {
-		return (double) 32767;
+		return (double) SHRT_MAX;
 	}
 
 	/** sets the receive chan gain, returns the gain setting **/
@@ -153,19 +161,10 @@ public:
 	/** return minimum Rx Gain **/
 	double minRxGain(void);
 
-	/** sets the transmit chan gain, returns the gain setting **/
-	double setTxGain(double dB, size_t chan = 0);
+	double setPowerAttenuation(int atten, size_t chan);
+	double getPowerAttenuation(size_t chan = 0);
 
-	/** get transmit gain */
-	double getTxGain(size_t chan = 0) {
-		return tx_gains[chan];
-	}
-
-	/** return maximum Tx Gain **/
-	double maxTxGain(void);
-
-	/** return minimum Rx Gain **/
-	double minTxGain(void);
+	int getNominalTxPower(size_t chan = 0);
 
 	/** sets the RX path to use, returns true if successful and false otherwise */
 	bool setRxAntenna(const std::string & ant, size_t chan = 0);

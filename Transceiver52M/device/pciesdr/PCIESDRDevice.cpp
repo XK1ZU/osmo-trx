@@ -51,7 +51,7 @@ using namespace std;
 
 #define PSAMPLES_NUM  4096
 
-/* Size of Rx timestamp based Ring buffer, in bytes */
+/* Size of Rx / Tx timestamp based Ring buffer, in bytes */
 #define SAMPLE_BUF_SZ (1 << 20)
 
 /* greatest common divisor */
@@ -270,11 +270,6 @@ double PCIESDRDevice::maxTxGain()
 	return 60;
 }
 
-double PCIESDRDevice::minTxGain()
-{
-	return 0;
-}
-
 double PCIESDRDevice::maxRxGain()
 {
 	return 50;
@@ -283,6 +278,16 @@ double PCIESDRDevice::maxRxGain()
 double PCIESDRDevice::minRxGain()
 {
 	return 0;
+}
+
+double PCIESDRDevice::getTxGain(size_t chan)
+{
+	if (chan) {
+		LOGC(DDEV, ERROR) << "Invalid channel " << chan;
+		return 0.0;
+	}
+
+	return msdr_get_tx_gain(device, chan);
 }
 
 double PCIESDRDevice::setTxGain(double dB, size_t chan)
@@ -305,6 +310,17 @@ double PCIESDRDevice::setTxGain(double dB, size_t chan)
 	return StartParams.tx_gain[chan];
 }
 
+double PCIESDRDevice::setPowerAttenuation(int atten, size_t chan) {
+	double rfGain;
+
+	rfGain = setTxGain(maxTxGain() - atten, chan);
+	return maxTxGain() - rfGain;
+}
+
+double PCIESDRDevice::getPowerAttenuation(size_t chan) {
+	return maxTxGain() - getTxGain(chan);
+}
+
 double PCIESDRDevice::setRxGain(double dB, size_t chan)
 {
 	int res;
@@ -323,6 +339,14 @@ double PCIESDRDevice::setRxGain(double dB, size_t chan)
 	}
 
 	return StartParams.rx_gain[chan];
+}
+
+int PCIESDRDevice::getNominalTxPower(size_t chan)
+{
+	/* TODO: return value based on some experimentally generated table depending on
+	* band/arfcn, which is known here thanks to TXTUNE
+	*/
+	return 0;
 }
 
 bool PCIESDRDevice::flush_recv()
@@ -354,7 +378,7 @@ bool PCIESDRDevice::flush_recv()
 
 /* NOTE: Assumes sequential reads */
 int PCIESDRDevice::readSamples(std::vector <short *> &bufs, int len, bool *overrun,
-		               TIMESTAMP timestamp, bool *underrun, unsigned *RSSI)
+		               TIMESTAMP timestamp, bool *underrun)
 {
 	int rc, num_smpls, expect_smpls;
 	ssize_t avail_smpls;
@@ -453,8 +477,7 @@ int PCIESDRDevice::readSamples(std::vector <short *> &bufs, int len, bool *overr
 }
 
 int PCIESDRDevice::writeSamples(std::vector<short *> &bufs, int len,
-                                bool *underrun, unsigned long long timestamp,
-                                bool isControl)
+                                bool *underrun, unsigned long long timestamp)
 {
 	int rc = 0;
 	unsigned int i;
@@ -466,11 +489,6 @@ int PCIESDRDevice::writeSamples(std::vector<short *> &bufs, int len,
 
 	if (!started)
 		return -1;
-
-	if (isControl) {
-		LOGC(DDEV, ERROR) << "Control packets not supported";
-		return 0;
-	}
 
 	if (bufs.size() != chans) {
 		LOGC(DDEV, ERROR) << "Invalid channel combination " << bufs.size();
