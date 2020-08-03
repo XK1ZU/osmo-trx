@@ -293,7 +293,7 @@ double PCIESDRDevice::getTxGain(size_t chan)
 
 double PCIESDRDevice::setTxGain(double dB, size_t chan)
 {
-	int res;
+	int res = 0;
 
 	if (chan) {
 		LOGC(DDEV, ERROR) << "Invalid channel " << chan;
@@ -301,11 +301,13 @@ double PCIESDRDevice::setTxGain(double dB, size_t chan)
 	}
 
 	LOGC(DDEV, INFO) << "Setting TX gain to " << dB << " dB. device:" << device << " chan:" << chan;
-	res = msdr_set_tx_gain(device, chan, dB);
-	if (res) {
-		LOGC(DDEV, INFO) << "Error setting TX gain res: " << res;
-	} else {
-		StartParams.tx_gain[chan] = dB;
+	StartParams.tx_gain[chan] = dB;
+
+	if (started) {
+		res = msdr_set_tx_gain(device, chan, StartParams.tx_gain[chan]);
+		if (res) {
+			LOGC(DDEV, INFO) << "Error setting TX gain res: " << res;
+		}
 	}
 
 	return StartParams.tx_gain[chan];
@@ -324,7 +326,7 @@ double PCIESDRDevice::getPowerAttenuation(size_t chan) {
 
 double PCIESDRDevice::setRxGain(double dB, size_t chan)
 {
-	int res;
+	int res = 0;
 
 	if (chan) {
 		LOGC(DDEV, ERROR) << "Invalid channel " << chan;
@@ -332,11 +334,13 @@ double PCIESDRDevice::setRxGain(double dB, size_t chan)
 	}
 
 	LOGC(DDEV, INFO) << "Setting RX gain to " << dB << " dB.";
-	res = msdr_set_rx_gain(device, chan, dB);
-	if (res) {
-		LOGC(DDEV, ERROR) << "Error setting RX gain res: " << res;
-	} else {
-		StartParams.rx_gain[chan] = dB;
+	StartParams.rx_gain[chan] = dB;
+
+	if (started) {
+		res = msdr_set_rx_gain(device, chan, dB);
+		if (res) {
+			LOGC(DDEV, ERROR) << "Error setting RX gain res: " << res;
+		}
 	}
 
 	return StartParams.rx_gain[chan];
