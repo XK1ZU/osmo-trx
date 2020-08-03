@@ -267,7 +267,7 @@ bool PCIESDRDevice::stop()
 
 double PCIESDRDevice::maxTxGain()
 {
-	return 60;
+	return 90;
 }
 
 double PCIESDRDevice::maxRxGain()
