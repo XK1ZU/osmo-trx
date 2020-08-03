@@ -164,9 +164,10 @@ int PCIESDRDevice::open(const std::string &args, int ref, bool swap_channels)
 	StartParams.rx_bandwidth[0] = actualSampleRate * 0.75;
 	StartParams.tx_bandwidth[0] = actualSampleRate * 0.75;
 	LOGC(DDEV, INFO) << "PCIESDR device txsps:" << tx_sps << " rxsps:" << rx_sps
-	                 << " GSMRATE * tx_sps:" << (double)GSMRATE * tx_sps;
+		         << " GSMRATE * tx_sps:" << (double)GSMRATE * tx_sps;
 	LOGC(DDEV, INFO) << "PCIESDR sample_rate_num:" << StartParams.sample_rate_num[0]
-	                 << " sample_rate_den:" << StartParams.sample_rate_den[0] << " BW:" << StartParams.rx_bandwidth[0];
+		         << " sample_rate_den:" << StartParams.sample_rate_den[0]
+		         << " BW:" << StartParams.rx_bandwidth[0];
 
 	switch (ref) {
 	case REF_INTERNAL:
@@ -400,7 +401,8 @@ int PCIESDRDevice::readSamples(std::vector <short *> &bufs, int len, bool *overr
 	}
 
 	if (len > (int)(sizeof(samples) / sizeof(*samples))) {
-		LOGC(DDEV, ERROR) << "Sample buffer:" << (sizeof(samples) / sizeof(*samples)) << " is smaller than len:" << len;
+		LOGC(DDEV, ERROR) << "Sample buffer:" << (sizeof(samples) / sizeof(*samples))
+			          << " is smaller than len:" << len;
 		return -1;
 	}
 
@@ -426,14 +428,17 @@ int PCIESDRDevice::readSamples(std::vector <short *> &bufs, int len, bool *overr
 			psamples = &samples[0];
 			num_smpls = msdr_read(device, &timestamp_tmp, (void**)&psamples, expect_smpls, i, 100);
 			if (num_smpls < 0) {
-				LOGC(DDEV, ERROR) << "PCIESDR readSamples msdr_read failed num_smpls " << num_smpls << " device: " << device
+				LOGC(DDEV, ERROR) << "PCIESDR readSamples msdr_read failed num_smpls " << num_smpls
+					   << " device: " << device
 					   << " expect_smpls: " << expect_smpls
 					   << ", expTs:" << expect_timestamp << " got " << timestamp_tmp;
-				LOGCHAN(i, DDEV, ERROR) << "Device receive timed out (" << rc << " vs exp " << len << ").";
+				LOGCHAN(i, DDEV, ERROR) << "Device receive timed out (" << rc
+					   << " vs exp " << len << ").";
 				return -1;
 			}
 
-			LOGCHAN(i, DDEV, DEBUG) "Received timestamp = " << (TIMESTAMP)timestamp_tmp << " (" << num_smpls << ")";
+			LOGCHAN(i, DDEV, DEBUG) << "Received timestamp = " << (TIMESTAMP)timestamp_tmp
+				                                           << " (" << num_smpls << ")";
 
 #ifdef LIBSDR_HAS_MSDR_CONVERT
 			msdr_convert_cf32_to_ci16(bufs[i], (float *)psamples, num_smpls);
@@ -496,7 +501,8 @@ int PCIESDRDevice::writeSamples(std::vector<short *> &bufs, int len,
 	}
 
 	if (len > (int)(sizeof(samples) / sizeof(*samples))) {
-		LOGC(DDEV, ERROR) << "Sample buffer:" << (sizeof(samples) / sizeof(*samples)) << " is smaller than len:" << len;
+		LOGC(DDEV, ERROR) << "Sample buffer:" << (sizeof(samples) / sizeof(*samples))
+			          << " is smaller than len:" << len;
 		return -1;
 	}
 
@@ -515,7 +521,8 @@ int PCIESDRDevice::writeSamples(std::vector<short *> &bufs, int len,
 #endif
 		rc = msdr_write(device, timestamp_tmp, (const void**)&psamples, len, i, &hw_time);
 		if (rc != len) {
-			LOGC(DDEV, ALERT) << "PCIESDR writeSamples: Device send timed out rc:" << rc << " timestamp" << timestamp_tmp << " len:" << len << " hwtime:" << hw_time;
+			LOGC(DDEV, ALERT) << "PCIESDR writeSamples: Device send timed out rc:" << rc
+				          << " timestamp" << timestamp_tmp << " len:" << len << " hwtime:" << hw_time;
 			LOGCHAN(i, DDEV, ERROR) << "PCIESDR: Device Tx timed out (" << rc << " vs exp " << len << ").";
 			return -1;
 		}
@@ -523,15 +530,18 @@ int PCIESDRDevice::writeSamples(std::vector<short *> &bufs, int len,
 			LOGC(DDEV, ALERT) << "PCIESDR: get_stats failed:" << rc;
 		} else if (stats.tx_underflow_count > tx_underflow) {
 			tx_underflow = stats.tx_underflow_count;
-			LOGC(DDEV, ALERT) << "tx_underflow_count:" << stats.tx_underflow_count << " rx_overflow_count:" << stats.rx_overflow_count;
+			LOGC(DDEV, ALERT) << "tx_underflow_count:" << stats.tx_underflow_count
+				          << " rx_overflow_count:" << stats.rx_overflow_count;
 			*underrun = true;
 		}
 
 		if (timestamp_tmp - hw_time > (int64_t)actualSampleRate / 10)
-			LOGC(DDEV, ALERT) << "PCIESDR: tx diff more ts_tmp:" << timestamp_tmp << " ts:" << timestamp  << " hwts:" << hw_time;
+			LOGC(DDEV, ALERT) << "PCIESDR: tx diff more ts_tmp:" << timestamp_tmp << " ts:" << timestamp
+				          << " hwts:" << hw_time;
 
 		if (hw_time > timestamp_tmp) {
-			LOGC(DDEV, ALERT) << "PCIESDR: tx underrun ts_tmp:" << timestamp_tmp << " ts:" << timestamp  << " hwts:" << hw_time;
+			LOGC(DDEV, ALERT) << "PCIESDR: tx underrun ts_tmp:" << timestamp_tmp << " ts:" << timestamp
+				          << " hwts:" << hw_time;
 			*underrun = true;
 		}
 	}
